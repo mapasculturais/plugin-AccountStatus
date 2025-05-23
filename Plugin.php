@@ -3,7 +3,7 @@
 namespace AccountStatus;
 
 use MapasCulturais\App;
-
+use \AccountStatus\JobTypes\ProfileUpdateVerification;
 use \AccountStatus\JobTypes\StatusCheck;
 
 class Plugin extends \MapasCulturais\Plugin
@@ -32,6 +32,7 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
         
         $app->registerJobType(new StatusCheck(StatusCheck::SLUG));
+        $app->registerJobType(new ProfileUpdateVerification(ProfileUpdateVerification::SLUG));
     }
 
     function _init() {}
