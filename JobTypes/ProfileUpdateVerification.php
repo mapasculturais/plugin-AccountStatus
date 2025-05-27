@@ -27,7 +27,7 @@ class ProfileUpdateVerification extends JobType
         if($seal = $app->repo('Seal')->find($plugin->config['updated_seal_id'])) {
             $users = $app->repo('User')->findAll();
             $fields = $plugin->config['update_fields'];
-            $update_period = new DateTime($plugin->config['last_update_period']);
+            $update_period = new DateTime('-1 year');
 
             $app->disableAccessControl();
             foreach($users as $user) {

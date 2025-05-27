@@ -18,7 +18,7 @@ class Plugin extends \MapasCulturais\Plugin
             'inactive_seal_id' => env('USR_STATUS_INACTIVE_SEAL_ID', 5),
             'inactive_period' => env('USR_STATUS_INACTIVE_PERIOD', '-1 year'),
             'updated_seal_id' =>  env('USR_STATUS_UPDATED_SEAL_ID', 4),
-            'last_update_period' => env('USR_STATUS_LAST_UPDATE', '-1 year'),
+            'update_expiration_period' => env('USR_STATUS_LAST_UPDATE', '+1 year'),
             'update_fields' => [
                 'name',
                 'shortDescription',
@@ -64,7 +64,9 @@ class Plugin extends \MapasCulturais\Plugin
             if($agent = $app->repo('Agent')->find($this->data['agent_id'])) {
                 foreach($fields as $field) {
                     $app->disableAccessControl();
+                    $agent->updateTimestamp = new DateTime();
                     $agent->_newModifiedRevision(sprintf(i::__('campo "%s" modificado'), $field));
+                    $agent->save(true);
                     $app->enableAccessControl();
                 }
 
@@ -110,11 +112,13 @@ class Plugin extends \MapasCulturais\Plugin
                     $valid = false;
                     break;
                 }
+
                 $last_update = new DateTime($revision_field['create_timestamp']);
-                $update_period = new DateTime($this->config['last_update_period']);
-                $almost_expired = (clone $update_period)->modify('+1 month');
+                $now = new DateTime();
+                $expiration_date = (clone $last_update)->modify($this->config['update_expiration_period']);
+                $almost_expired = (clone $expiration_date)->modify('-1 month');
                 
-                if($last_update <= $update_period || $last_update >= $almost_expired) {
+                if ($now >= $expiration_date || $now >= $almost_expired) {
                     $valid = false;
                     break;
                 }
