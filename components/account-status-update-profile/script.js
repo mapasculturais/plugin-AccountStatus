@@ -15,6 +15,8 @@ app.component('account-status-update-profile', {
 
     data() {
         return {
+            showButton: true,
+            processing: false
         }
     },
 
@@ -40,8 +42,10 @@ app.component('account-status-update-profile', {
                 agent_id: this.entity.id,
             };
 
+            this.processing = true;
             api.POST(url, data).then(res => res.json()).then(data => {
-                // this.entity.save(true);
+                this.processing = false;
+                this.showButton = false;
             })
         }
     },
