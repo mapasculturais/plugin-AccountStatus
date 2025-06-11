@@ -127,4 +127,45 @@ class Plugin extends \MapasCulturais\Plugin
 
         return $valid;
     }
+
+    function getMostRecentUpdateField($agent_id)
+    {
+        $app = App::i();
+        $fields = $this->config['update_fields'];
+        $most_recent_date = null;
+
+        foreach ($fields as $field) {
+            $conn = $app->em->getConnection();
+            $query = $conn->fetchAll("
+                SELECT er.create_timestamp, rd.value
+                FROM entity_revision er
+                LEFT JOIN entity_revision_revision_data errd ON errd.revision_id = er.id
+                LEFT JOIN entity_revision_data rd ON rd.id = errd.revision_data_id
+                WHERE 
+                    er.object_type = 'MapasCulturais\\Entities\\Agent' 
+                    AND er.action = 'modified'
+                    AND er.object_id = :agent_id
+                    AND rd.key = :key
+                ORDER BY er.create_timestamp DESC
+                LIMIT 1;
+            ", [
+                'agent_id' => $agent_id,
+                'key' => $field
+            ]);
+
+            if ($revision_field = $query[0] ?? null) {
+                $value = $revision_field['value'];
+                
+                if ($value !== null && $value !== '' && $value !== 'null') {
+                    $field_date = new DateTime($revision_field['create_timestamp']);
+
+                    if (is_null($most_recent_date) || $field_date > $most_recent_date) {
+                        $most_recent_date = $field_date;
+                    }
+                }
+            }
+        }
+
+        return $most_recent_date;
+    }
 }
