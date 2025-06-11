@@ -55,6 +55,12 @@ class Plugin extends \MapasCulturais\Plugin
                 $this->part('update-profile');
             }
         });
+        
+        $app->hook('template(agent.edit.tab-entity-info):after', function () use($self) {
+            /** @var Theme $this */
+            
+            $this->part('last-update-profile');
+        });
 
         $app->hook('POST(site.atualizar-dados)', function() use($app, $self) {
             $this->requireAuthentication();
