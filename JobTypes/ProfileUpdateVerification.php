@@ -23,18 +23,25 @@ class ProfileUpdateVerification extends JobType
 
         /** @var Plugin $plugin */
         $plugin = Plugin::getInstance();
+        $conn = $app->em->getConnection();
         
-        if($seal = $app->repo('Seal')->find($plugin->config['updated_seal_id'])) {
-            $users = $app->repo('User')->findAll();
+        if($user_ids = $conn->fetchFirstColumn("SELECT id FROM usr")) {
             $fields = $plugin->config['update_fields'];
             $update_period = new DateTime('-1 year');
 
             $app->disableAccessControl();
-            foreach($users as $user) {
+            foreach($user_ids as $user_id) {
+                if(!$seal = $app->repo('Seal')->find($plugin->config['updated_seal_id'])) {
+                    continue;
+                }
+
+                $user = $app->repo('User')->find($user_id);
+
                 $has_seal = false;
                 $need_update = false;
 
                 foreach($fields as $field) {
+                    $profile = $user->profile;
                     $conn = $app->em->getConnection();
                     $query = $conn->fetchAll("
                             SELECT er.object_id, er.create_timestamp, er.action, rd.timestamp, rd.key, rd.value
@@ -48,7 +55,7 @@ class ProfileUpdateVerification extends JobType
                             ORDER BY er.create_timestamp DESC
                             LIMIT 1;
                         ", [
-                        'agent_id' => $user->profile->id,
+                        'agent_id' => $profile->id,
                         'key' => $field
                     ]);
 
@@ -60,7 +67,7 @@ class ProfileUpdateVerification extends JobType
 
                         $last_update = new DateTime($revision_field['create_timestamp']);
 
-                        $seal_relations = $user->profile->getSealRelations();
+                        $seal_relations = $profile->getSealRelations();
                         
                         foreach($seal_relations as $seal_relation) {
                             if($seal_relation->seal->id == $seal->id) {
@@ -75,21 +82,23 @@ class ProfileUpdateVerification extends JobType
                 }
 
                 // Se o usuário precisa atualizar, remove o selo
-                if($need_update) {
-                    $user->profile->removeSealRelation($seal);
+                if($need_update && $has_seal) {
+                    $profile->removeSealRelation($seal);
                 }
 
                 // Se o usuário não tiver o selo e não precisa atualizar, sela o usuário
                 if(!$need_update && !$has_seal) {
-                    $user->profile->createSealRelation($seal, agent: $user->profile);
+                    $profile->createSealRelation($seal, agent: $profile);
                 }
 
                 // Caso o usuário esteja passando o prazo de atualização de cadastro, envia um e-mail
-                $valid_fields = $plugin->validateFields($user->profile->id);
+                $valid_fields = $plugin->validateFields($profile->id);
 
                 if(!$valid_fields) {
                     $this->sendMail($user);
                 }
+
+                $app->em->clear();
             }
             $app->enableAccessControl();
         }
