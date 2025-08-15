@@ -43,7 +43,6 @@ class ProfileUpdateVerification extends JobType
                             LEFT JOIN entity_revision_data rd ON rd.id = errd.revision_data_id
                             WHERE 
                                 er.object_type = 'MapasCulturais\Entities\Agent'
-                                AND er.action = 'modified'
                                 AND er.object_id = :agent_id
                                 AND rd.key = :key
                             ORDER BY er.create_timestamp DESC
