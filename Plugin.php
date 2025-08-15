@@ -15,9 +15,9 @@ class Plugin extends \MapasCulturais\Plugin
     function __construct(array $config = [])
     {
         $config += [
-            'inactive_seal_id' => env('USR_STATUS_INACTIVE_SEAL_ID', 5),
+            'inactive_seal_id' => env('USR_STATUS_INACTIVE_SEAL_ID'),
             'inactive_period' => env('USR_STATUS_INACTIVE_PERIOD', '-1 year'),
-            'updated_seal_id' =>  env('USR_STATUS_UPDATED_SEAL_ID', 4),
+            'updated_seal_id' =>  env('USR_STATUS_UPDATED_SEAL_ID'),
             'update_expiration_period' => env('USR_STATUS_LAST_UPDATE', '+1 year'),
             'update_fields' => [
                 'name',
