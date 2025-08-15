@@ -81,6 +81,21 @@ class Plugin extends \MapasCulturais\Plugin
 
             $this->errorJson(false);
         });
+
+        // Se o usuário tiver o selo de inativo, é removido ao se logar
+        $app->hook('auth.successful', function() use($app, $self) {
+            $agent = $app->user->profile;
+            $seal_relations = $agent->getSealRelations();
+
+            $app->disableAccessControl();
+            foreach($seal_relations as $seal_relation) {
+                if($seal_relation->seal->id == $self->config['inactive_seal_id']) {
+                    $agent->removeSealRelation($seal_relation->seal);
+                    break;
+                }
+            }
+            $app->enableAccessControl();
+        });
     }
 
     static function getInstance()
