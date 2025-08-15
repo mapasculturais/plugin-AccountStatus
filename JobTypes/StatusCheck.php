@@ -23,17 +23,24 @@ class StatusCheck extends JobType
         /** @var Plugin $plugin */
         $plugin = Plugin::getInstance();
         
-        if($seal = $app->repo('Seal')->find($plugin->config['inactive_seal_id'])) {
-            $users = $app->repo('User')->findAll();
-            
+        $conn = $app->conn;
+        if($user_ids = $conn->fetchFirstColumn("SELECT id FROM usr")) {
             $app->disableAccessControl();
-            foreach($users as $user) {
+
+            foreach($user_ids as $user_id) {
+                if(!$seal = $app->repo('Seal')->find($plugin->config['inactive_seal_id'])) {
+                    continue;
+                }
+                
+                $user = $app->repo('User')->find($user_id);
                 $last_login = $user->lastLoginTimestamp;
                 $inactive_period = new DateTime($plugin->config['inactive_period']);
                 
                 if($last_login < $inactive_period) {
                     $user->profile->createSealRelation($seal, agent: $user->profile);
                 }
+
+                $app->em->clear();
             }
             $app->enableAccessControl();
         }
