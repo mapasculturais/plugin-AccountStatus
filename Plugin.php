@@ -39,6 +39,11 @@ class Plugin extends \MapasCulturais\Plugin
         
         $app->registerJobType(new StatusCheck(StatusCheck::SLUG));
         $app->registerJobType(new ProfileUpdateVerification(ProfileUpdateVerification::SLUG));
+
+        $this->registerMetadata('MapasCulturais\Entities\Agent', 'checkUpdateExpiration', [
+            'label' => 'Status de expiração da atualização do usuário',
+            'type' => 'string',
+        ]);
     }
 
     function _init() 
