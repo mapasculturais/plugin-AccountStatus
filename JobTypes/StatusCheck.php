@@ -35,8 +35,17 @@ class StatusCheck extends JobType
                 $user = $app->repo('User')->find($user_id);
                 $last_login = $user->lastLoginTimestamp;
                 $inactive_period = new DateTime($plugin->config['inactive_period']);
-                
-                if($last_login < $inactive_period) {
+                $has_inactive_seal = false;
+
+                $seal_relations = $user->profile->getSealRelations();
+
+                foreach($seal_relations as $seal_relation) {
+                    if($seal_relation->seal->id == $seal->id) {
+                        $has_inactive_seal = true;
+                    }
+                }
+
+                if($last_login < $inactive_period && !$has_inactive_seal) {
                     $user->profile->createSealRelation($seal, agent: $user->profile);
                 }
 
