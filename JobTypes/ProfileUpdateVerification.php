@@ -89,13 +89,18 @@ class ProfileUpdateVerification extends JobType
                 // Se o usuário não tiver o selo e não precisa atualizar, sela o usuário
                 if(!$need_update && !$has_seal) {
                     $profile->createSealRelation($seal, agent: $profile);
+                    $profile->checkUpdateExpiration = 'updated';
+                    $profile->save(true);
                 }
 
                 // Caso o usuário esteja passando o prazo de atualização de cadastro, envia um e-mail
-                $valid_fields = $plugin->validateFields($profile->id);
+                $check_expiration = $this->checkExpiration($profile->id);
+                $status_expiration = ['expired', 'expires_today', '7days', '15days', '30days'];
 
-                if(!$valid_fields) {
-                    $this->sendMail($user);
+                if($check_expiration && in_array($check_expiration, $status_expiration) && $profile->checkUpdateExpiration != 'expired') {
+                    $this->sendMail($user, $check_expiration);
+                    $profile->checkUpdateExpiration = $check_expiration;
+                    $profile->save(true);
                 }
 
                 $app->em->clear();
@@ -104,7 +109,7 @@ class ProfileUpdateVerification extends JobType
         }
     }
 
-    function sendMail($user) {
+    function sendMail($user, string $expiration_status) {
         $app = App::i();
 
         $locale = i::get_locale();
@@ -113,10 +118,7 @@ class ProfileUpdateVerification extends JobType
         $filename = $app->view->resolveFilename("views/emails", $template);
         $template = file_get_contents($filename);
 
-        $message = sprintf(
-            i::__('Falta um mês para o seu selo de atualização expirar. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
-            '<a href="' . $user->profile->singleUrl . '" target="_blank">' . i::__('perfil') . '</a>'
-        );
+        $message = $this->getMessageMail($user->profile->singleUrl, $expiration_status);
         
         $params = [
             "siteName" => $app->siteName,
@@ -138,4 +140,87 @@ class ProfileUpdateVerification extends JobType
             'body' => $content,
         ]);
     }
+
+    function checkExpiration($agent_id) {
+        $app = App::i();
+
+        /** @var Plugin $plugin */
+        $plugin = Plugin::getInstance();
+        $fields = $plugin->config['update_fields'];
+
+        foreach($fields as $field) {
+            $conn = $app->em->getConnection();
+            $query = $conn->fetchAll("
+                SELECT er.object_id, er.create_timestamp, er.action, rd.timestamp, rd.key, rd.value
+                FROM entity_revision er
+                LEFT JOIN entity_revision_revision_data errd ON errd.revision_id = er.id
+                LEFT JOIN entity_revision_data rd ON rd.id = errd.revision_data_id
+                WHERE 
+                    er.object_type = 'MapasCulturais\Entities\Agent' 
+                    AND er.object_id = :agent_id
+                    AND rd.key = :key
+                ORDER BY er.create_timestamp DESC
+                LIMIT 1;
+            ", [
+                'agent_id' => $agent_id,
+                'key' => $field
+            ]);
+
+            if($revision_field = $query[0] ?? null) {
+                if(empty($revision_field['value']) || $revision_field['value'] === 'null') {
+                    return 'expired';
+                }
+
+                $last_update = new DateTime($revision_field['create_timestamp']);
+                $expiration_date = (clone $last_update)->modify($plugin->config['update_expiration_period']); 
+                $now = new DateTime();
+
+                $diff = (int)$now->diff($expiration_date)->format('%r%a'); 
+
+                if($diff < 0) return 'expired';
+                if($diff == 0) return 'expires_today';
+                if($diff == 7) return '7days';
+                if($diff == 15) return '15days';
+                if($diff == 30) return '30days';
+            }
+        }
+
+        return 'updated';
+    }
+
+    function getMessageMail(string $url, string $expiration_status): string {
+        $link = '<a href="' . $url . '" target="_blank">' . i::__('perfil') . '</a>';
+
+        switch ($expiration_status) {
+            case 'expired':
+                return sprintf(
+                    i::__('Seu selo de atualização está expirado. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
+                    $link
+                );
+            case 'expires_today':
+                return sprintf(
+                    i::__('Seu selo de atualização irá expirar hoje. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
+                    $link
+                );
+            case '7days':
+                return sprintf(
+                    i::__('Faltam 7 dias para o seu selo de atualização expirar. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
+                    $link
+                );
+            case '15days':
+                return sprintf(
+                    i::__('Faltam 15 dias para o seu selo de atualização expirar. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
+                    $link
+                );
+            case '30days':
+                return sprintf(
+                    i::__('Falta um mês para o seu selo de atualização expirar. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
+                    $link
+                );
+            default:
+                return '';
+        }
+    }
+
+
 }
