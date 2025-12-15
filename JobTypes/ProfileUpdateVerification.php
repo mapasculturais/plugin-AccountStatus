@@ -31,11 +31,19 @@ class ProfileUpdateVerification extends JobType
 
             $app->disableAccessControl();
             foreach($user_ids as $user_id) {
-                if(!$seal = $app->repo('Seal')->find($plugin->config['updated_seal_id'])) {
+                $user = $app->repo('User')->find($user_id);
+                
+                $is_inactive = $this->checkInactiveStatus($user, $plugin);
+                
+                if($is_inactive) {
+                    $app->em->clear();
                     continue;
                 }
-
-                $user = $app->repo('User')->find($user_id);
+                
+                if(!$seal = $app->repo('Seal')->find($plugin->config['updated_seal_id'])) {
+                    $app->em->clear();
+                    continue;
+                }
 
                 $has_seal = false;
                 $need_update = false;
@@ -97,7 +105,7 @@ class ProfileUpdateVerification extends JobType
                 $check_expiration = $this->checkExpiration($profile->id);
                 $status_expiration = ['expired', 'expires_today', '7days', '15days', '30days'];
 
-                if($check_expiration && in_array($check_expiration, $status_expiration) && $profile->checkUpdateExpiration != 'expired') {
+                if($check_expiration && in_array($check_expiration, $status_expiration) && $profile->checkUpdateExpiration != $check_expiration) {
                     $this->sendMail($user, $check_expiration);
                     $profile->checkUpdateExpiration = $check_expiration;
                     $profile->save(true);
@@ -222,5 +230,51 @@ class ProfileUpdateVerification extends JobType
         }
     }
 
+    private function checkInactiveStatus($user, $plugin) {
+        $app = App::i();
+        $last_login = $user->lastLoginTimestamp;
+        $inactive_period = new DateTime($plugin->config['inactive_period']);
+        $inactive_seal = $app->repo('Seal')->find($plugin->config['inactive_seal_id']);
+        $updated_seal = $app->repo('Seal')->find($plugin->config['updated_seal_id']);
+        
+        if(!$inactive_seal) {
+            return false;
+        }
+        
+        $profile = $user->profile;
+        $seal_relations = $profile->getSealRelations();
+        
+        $has_inactive_seal = false;
+        $has_updated_seal = false;
+        
+        foreach($seal_relations as $seal_relation) {
+            if($seal_relation->seal->id == $inactive_seal->id) {
+                $has_inactive_seal = true;
+            }
+            if($updated_seal && $seal_relation->seal->id == $updated_seal->id) {
+                $has_updated_seal = true;
+            }
+        }
+        
+        $is_inactive = ($last_login < $inactive_period);
+        
+        if($is_inactive) {
+            if(!$has_inactive_seal) {
+                $profile->createSealRelation($inactive_seal, agent: $profile);
+            }
+            
+            if($has_updated_seal && $updated_seal) {
+                $profile->removeSealRelation($updated_seal);
+            }
+            
+            return true;
+        } else {
+            if($has_inactive_seal) {
+                $profile->removeSealRelation($inactive_seal);
+            }
+            
+            return false;
+        }
+    }
 
 }

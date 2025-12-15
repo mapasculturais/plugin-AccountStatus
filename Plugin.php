@@ -5,7 +5,6 @@ namespace AccountStatus;
 use MapasCulturais\App;
 use MapasCulturais\i;
 use \AccountStatus\JobTypes\ProfileUpdateVerification;
-use \AccountStatus\JobTypes\StatusCheck;
 use DateTime;
 
 class Plugin extends \MapasCulturais\Plugin
@@ -37,7 +36,6 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $app = App::i();
         
-        $app->registerJobType(new StatusCheck(StatusCheck::SLUG));
         $app->registerJobType(new ProfileUpdateVerification(ProfileUpdateVerification::SLUG));
 
         $this->registerMetadata('MapasCulturais\Entities\Agent', 'checkUpdateExpiration', [
