@@ -24,7 +24,7 @@ class ProfileUpdateVerification extends JobType
         /** @var Plugin $plugin */
         $plugin = Plugin::getInstance();
         $conn = $app->em->getConnection();
-        if($user_ids = $conn->fetchFirstColumn("SELECT id FROM usr")) {
+        if($user_ids = $conn->fetchFirstColumn("SELECT id FROM usr where status > 0")) {
             $fields = $plugin->config['update_fields'];
             $update_period = new DateTime('-1 year');
 
