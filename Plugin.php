@@ -42,6 +42,11 @@ class Plugin extends \MapasCulturais\Plugin
             'label' => 'Status de expiração da atualização do usuário',
             'type' => 'string',
         ]);
+
+        $this->registerMetadata('MapasCulturais\Entities\Agent', 'statusRegistered', [
+            'label' => 'Define se o usuário está inativo',
+            'type' => 'string',
+        ]);
     }
 
     function _init() 
@@ -90,9 +95,13 @@ class Plugin extends \MapasCulturais\Plugin
             $agent = $app->user->profile;
             $seal_relations = $agent->getSealRelations();
 
+            $conn = $app->em->getConnection();
+
             $app->disableAccessControl();
+            
             foreach($seal_relations as $seal_relation) {
                 if($seal_relation->seal->id == $self->config['inactive_seal_id']) {
+                    $conn->executeQuery("UPDATE agent_meta set value = 'active' where object_id = {$agent->id} and key = 'statusRegistered'");
                     $agent->removeSealRelation($seal_relation->seal);
                     break;
                 }

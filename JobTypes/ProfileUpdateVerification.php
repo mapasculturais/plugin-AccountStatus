@@ -24,7 +24,6 @@ class ProfileUpdateVerification extends JobType
         /** @var Plugin $plugin */
         $plugin = Plugin::getInstance();
         $conn = $app->em->getConnection();
-        
         if($user_ids = $conn->fetchFirstColumn("SELECT id FROM usr")) {
             $fields = $plugin->config['update_fields'];
             $update_period = new DateTime('-1 year');
@@ -32,10 +31,20 @@ class ProfileUpdateVerification extends JobType
             $app->disableAccessControl();
             foreach($user_ids as $user_id) {
                 $user = $app->repo('User')->find($user_id);
+                $profile = $user->profile;
                 
                 $is_inactive = $this->checkInactiveStatus($user, $plugin);
-                
                 if($is_inactive) {
+                    if($profile->statusRegistered != 'inactive') {
+                        $locale = i::get_locale();
+                        $template = "inactive-user-{$locale}.html";
+                        $subject = "[{$app->siteName}] " . i::__("Seu cadastro no sistema foi definido com status de inativo");
+                        
+                        $this->sendMail($user, 'inactive', $template, $subject);
+                        $profile->statusRegistered = 'inactive';
+                        $profile->save(true);
+                    }
+
                     $app->em->clear();
                     continue;
                 }
@@ -49,7 +58,6 @@ class ProfileUpdateVerification extends JobType
                 $need_update = false;
 
                 foreach($fields as $field) {
-                    $profile = $user->profile;
                     $conn = $app->em->getConnection();
                     $query = $conn->fetchAll("
                             SELECT er.object_id, er.create_timestamp, er.action, rd.timestamp, rd.key, rd.value
@@ -117,11 +125,12 @@ class ProfileUpdateVerification extends JobType
         }
     }
 
-    function sendMail($user, string $expiration_status) {
+    function sendMail($user, string $expiration_status, ?string $_template = null, ?string $_subject = null) {
         $app = App::i();
 
         $locale = i::get_locale();
-        $template = "update-profile-{$locale}.html";
+        $template = $_template ? $_template : "update-profile-{$locale}.html";
+        $subject = $_subject ? $_subject : "[{$app->siteName}] " . i::__("Atualize seu cadastro");
         
         $filename = $app->view->resolveFilename("views/emails", $template);
         $template = file_get_contents($filename);
@@ -144,7 +153,7 @@ class ProfileUpdateVerification extends JobType
             'to' => ($user->profile->emailPrivado ??
                 $user->profile->emailPublico ?? 
                 $user->email),
-            'subject' => "[{$app->siteName}] " . i::__("Atualize seu cadastro"),
+            'subject' => $subject,
             'body' => $content,
         ]);
     }
@@ -197,6 +206,7 @@ class ProfileUpdateVerification extends JobType
     }
 
     function getMessageMail(string $url, string $expiration_status): string {
+        $app = App::i();
         $link = '<a href="' . $url . '" target="_blank">' . i::__('perfil') . '</a>';
 
         switch ($expiration_status) {
@@ -223,6 +233,12 @@ class ProfileUpdateVerification extends JobType
             case '30days':
                 return sprintf(
                     i::__('Falta um mês para o seu selo de atualização expirar. Para manter seu cadastro atualizado, vá no seu %s e atualize as informações obrigatórias e clique no botão atualizar.'),
+                    $link
+                );
+            case 'inactive':
+                return sprintf(
+                    i::__('Seu cadastro no sistema %s encontra-se atualmente com status inativo. Para manter seu cadastro ativo, acesse seu perfil no link %s, atualize os dados necessários e salve o cadastro ao final do processo. Caso todas as informações já estejam corretas, basta acessar o perfil e salvá-lo novamente para regularizar o status'),
+                    $app->siteName,
                     $link
                 );
             default:
