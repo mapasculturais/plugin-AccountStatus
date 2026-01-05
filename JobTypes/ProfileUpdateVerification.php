@@ -148,11 +148,17 @@ class ProfileUpdateVerification extends JobType
         $mustache = new \Mustache_Engine();
         $content = $mustache->render($template, $params);
 
+        $to = filter_var($user->profile->emailPrivado ?? null, FILTER_VALIDATE_EMAIL)
+            ?: filter_var($user->profile->emailPublico ?? null, FILTER_VALIDATE_EMAIL)
+            ?: filter_var($user->email ?? null, FILTER_VALIDATE_EMAIL);
+
+        if(!$to) {
+            return;
+        }
+        
         $app->createAndSendMailMessage([
             'from' => $app->config['mailer.from'],
-            'to' => ($user->profile->emailPrivado ??
-                $user->profile->emailPublico ?? 
-                $user->email),
+            'to' => $to,
             'subject' => $subject,
             'body' => $content,
         ]);
