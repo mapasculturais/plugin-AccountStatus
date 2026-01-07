@@ -90,6 +90,13 @@ class Plugin extends \MapasCulturais\Plugin
             $this->errorJson(false);
         });
 
+
+        $app->hook("entity(Agent).save:after", function() use($app, $self) {
+            /** @var Agent $this */
+            $seal = $app->repo('Seal')->find($self->config['updated_seal_id']);
+            $self->checkUpdate($this, $seal);
+        });
+
         // Se o usuário tiver o selo de inativo, é removido ao se logar
         $app->hook('auth.successful', function() use($app, $self) {
             $agent = $app->user->profile;
@@ -198,5 +205,68 @@ class Plugin extends \MapasCulturais\Plugin
         }
 
         return $most_recent_date;
+    }
+
+    function checkUpdate($profile, $seal)
+    {
+        $app = App::i();
+        $has_seal = false;
+        $need_update = false;
+        $fields = $this->config['update_fields'];
+        $update_period = new DateTime('-1 year');
+     
+        $app->disableAccessControl();
+        foreach ($fields as $field) {
+            $conn = $app->em->getConnection();
+            $query = $conn->fetchAll("
+                            SELECT er.object_id, er.create_timestamp, er.action, rd.timestamp, rd.key, rd.value
+                            FROM entity_revision er
+                            LEFT JOIN entity_revision_revision_data errd ON errd.revision_id = er.id
+                            LEFT JOIN entity_revision_data rd ON rd.id = errd.revision_data_id
+                            WHERE 
+                                er.object_type = 'MapasCulturais\Entities\Agent'
+                                AND er.object_id = :agent_id
+                                AND rd.key = :key
+                            ORDER BY er.create_timestamp DESC
+                            LIMIT 1;
+                        ", [
+                'agent_id' => $profile->id,
+                'key' => $field
+            ]);
+
+            if ($revision_field = $query[0] ?? null) {
+                if ($revision_field['value'] == null || $revision_field['value'] == '' || $revision_field['value'] == 'null') {
+                    $need_update = true;
+                    break;
+                }
+
+                $last_update = new DateTime($revision_field['create_timestamp']);
+
+                $seal_relations = $profile->getSealRelations();
+
+                foreach ($seal_relations as $seal_relation) {
+                    if ($seal_relation->seal->id == $seal->id) {
+                        $has_seal = true;
+
+                        if ($last_update < $update_period) {
+                            $need_update = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Se o usuário precisa atualizar, remove o selo
+        if ($need_update && $has_seal) {
+            $profile->removeSealRelation($seal);
+        }
+
+        // Se o usuário não tiver o selo e não precisa atualizar, sela o usuário
+        if (!$need_update && !$has_seal) {
+            $profile->createSealRelation($seal, agent: $profile);
+            $profile->checkUpdateExpiration = 'updated';
+            $profile->save(true);
+        }
+        $app->enableAccessControl();
     }
 }
