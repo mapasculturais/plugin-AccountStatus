@@ -91,7 +91,7 @@ class Plugin extends \MapasCulturais\Plugin
         });
 
 
-        $app->hook("entity(Agent).save:after", function() use($app, $self) {
+        $app->hook("entity(Agent).save:finish", function() use($app, $self) {
             /** @var Agent $this */
             $seal = $app->repo('Seal')->find($self->config['updated_seal_id']);
             $self->checkUpdate($this, $seal);
@@ -114,6 +114,26 @@ class Plugin extends \MapasCulturais\Plugin
                 }
             }
             $app->enableAccessControl();
+        });
+
+        $app->hook('template(<<*>>.<<*>>.body):begin', function () use ($app, $self) {
+            if(!$app->user->is('guest')) {
+                $agent = $app->user->profile;
+                
+                $valid_fields = false;
+                if($seals = $agent->getSealRelations()) {   
+                    foreach($seals as $seal) {
+                        if($seal->seal->id == $self->config['updated_seal_id']) {
+                            $valid_fields = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if(!$valid_fields) {
+                    $this->part('popup-message-update-profile', ['fields' => $self->config['update_fields']]);
+                }
+            }
         });
     }
 
@@ -214,8 +234,8 @@ class Plugin extends \MapasCulturais\Plugin
         $need_update = false;
         $fields = $this->config['update_fields'];
         $update_period = new DateTime('-1 year');
-     
         $app->disableAccessControl();
+        
         foreach ($fields as $field) {
             $conn = $app->em->getConnection();
             $query = $conn->fetchAll("
@@ -233,6 +253,11 @@ class Plugin extends \MapasCulturais\Plugin
                 'agent_id' => $profile->id,
                 'key' => $field
             ]);
+
+            if(empty($query)) {
+                $need_update = true;
+                break;
+            }
 
             if ($revision_field = $query[0] ?? null) {
                 if ($revision_field['value'] == null || $revision_field['value'] == '' || $revision_field['value'] == 'null') {
